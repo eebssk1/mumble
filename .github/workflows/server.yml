@@ -1,0 +1,46 @@
+name: Server
+
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/eebssk1/bbk/debian-bookworm:latest
+    env:
+      TaG: 'v1.5.735'
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+        ref: ${{ env.TaG }}
+    - name: toolchain
+      run: |
+        cd /opt/
+        curl -L "https://github.com/eebssk1/aio_tc_build/releases/latest/download/x86_64-linux-gnu-native.tb2" | tar --bz -x
+    - name: update and dep
+      run: |
+        apt-get update && apt-get upgrade -y --autoremove --purge
+        apt-get install -y cmake make ninja-build libglib2.0-dev protobuf-compiler libcap-dev libavahi-compat-libdnssd-dev libprotobuf-dev qtbase5-dev libboost-dev libssl-dev
+    - name: build
+      run: |
+        export PATH=/opt/x86_64-linux-gnu/bin:$PATH
+        export CFLAGS="-static-libgcc -static-libstdc++"
+        export CXXFLAGS="-static-libgcc -static-libstdc++"
+        cmake -G "Ninja" -Dclient=OFF -DCMAKE_BUILD_TYPE=Release -Dice=OFF -Dstatic=ON -DCMAKE_INSTALL_PREFIX=/opt/mumble-server
+        ninja
+        cmake --install --strip
+        tar --bzip -cf mumble-server.tb2 /opt/mumble-server
+    - name: upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-static-server
+        path: "mumble-server.tb2"
+    - name: release
+      uses: ncipollo/release-action@v1
+      with:
+        allowUpdates: true
+        artifacts: "mumble-server.tb2"
+        makeLatest: true
+        tag: ${{ env.TaG }}
+
